@@ -128,7 +128,7 @@ def get_artist_albums(artist_id, token):
         return None
     
 # --- Funzione Principale per Processare un Singolo Artista ---
-def process_artist(artist_name, client_id, client_secret, telegram_bot_token, telegram_chat_id, telegram_enabled, output_directory):
+def process_artist(artist_name, client_id, client_secret, telegram_bot_token, telegram_chat_id, telegram_enabled, output_directory, cookie_file_path):
     """Processa un singolo artista: cerca, scarica album e notifica."""
     print(f"\n--- Inizio elaborazione per l'artista: {artist_name} ---")
 
@@ -169,8 +169,14 @@ def process_artist(artist_name, client_id, client_secret, telegram_bot_token, te
                     for name, url in sorted_albums:
                         print(f"\n-> Esecuzione di spotdl per l'album: {name} ({url})")
                         try:
-                            # Costruisci il comando come lista, aggiungendo i parametri e la directory di output
+                            # Costruisci il comando come lista, aggiungendo i parametri, la directory di output e i cookie
                             command = ['spotdl', url, '--format', 'opus', '--bitrate', 'disable', '--output', output_directory]
+                            if cookie_file_path and os.path.exists(cookie_file_path):
+                                command.extend(['--cookies', cookie_file_path])
+                                print(f"   Utilizzo del file cookie: {cookie_file_path}")
+                            else:
+                                print(f"   ATTENZIONE: File cookie non trovato o non specificato ({cookie_file_path}). Tento il download senza cookie.")
+
                             # Esegui il comando e attendi il completamento con un timeout di 600 secondi (10 minuti).
                             # Rimuovendo capture_output=True, l'output di spotdl
                             # verrà mostrato direttamente nel terminale.
@@ -296,6 +302,18 @@ if __name__ == "__main__":
     output_dir = os.path.abspath(os.path.join(script_directory, ".."))
     print(f"I file verranno scaricati in: {output_dir}")
 
+    # Definisci il percorso del file cookie
+    # Assumiamo che sia nella stessa directory dello script
+    cookie_file = os.path.join(script_directory, "music.youtube.com_cookies.txt")
+    if not os.path.exists(cookie_file):
+        # Fallback a cookies.txt se il primo non esiste
+        cookie_file_alt = os.path.join(script_directory, "cookies.txt")
+        if os.path.exists(cookie_file_alt):
+            cookie_file = cookie_file_alt
+        else:
+            print(f"ATTENZIONE: Nessun file cookie (music.youtube.com_cookies.txt o cookies.txt) trovato in {script_directory}. I downloads potrebbero fallire.")
+            cookie_file = None # Nessun cookie valido trovato
+
     # Ciclo principale: processa ogni artista dalla lista
     total_artists = len(artists_to_process)
     for i, artist_name in enumerate(artists_to_process):
@@ -307,7 +325,8 @@ if __name__ == "__main__":
                            telegram_bot_token,
                            telegram_chat_id,
                            telegram_enabled,
-                           output_dir)
+                           output_dir,
+                           cookie_file)
         except Exception as e:
             # Cattura eccezioni non gestite all'interno di process_artist
             error_message = f"Errore GRAVE e inaspettato durante l'elaborazione dell'artista '{artist_name}': {e}"
