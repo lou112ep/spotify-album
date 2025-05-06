@@ -128,7 +128,7 @@ def get_artist_albums(artist_id, token):
         return None
     
 # --- Funzione Principale per Processare un Singolo Artista ---
-def process_artist(artist_name, client_id, client_secret, telegram_bot_token, telegram_chat_id, telegram_enabled):
+def process_artist(artist_name, client_id, client_secret, telegram_bot_token, telegram_chat_id, telegram_enabled, output_directory):
     """Processa un singolo artista: cerca, scarica album e notifica."""
     print(f"\n--- Inizio elaborazione per l'artista: {artist_name} ---")
 
@@ -169,8 +169,8 @@ def process_artist(artist_name, client_id, client_secret, telegram_bot_token, te
                     for name, url in sorted_albums:
                         print(f"\n-> Esecuzione di spotdl per l'album: {name} ({url})")
                         try:
-                            # Costruisci il comando come lista, aggiungendo i parametri
-                            command = ['spotdl', url, '--format', 'opus', '--bitrate', 'disable']
+                            # Costruisci il comando come lista, aggiungendo i parametri e la directory di output
+                            command = ['spotdl', url, '--format', 'opus', '--bitrate', 'disable', '--output', output_directory]
                             # Esegui il comando e attendi il completamento con un timeout di 600 secondi (10 minuti).
                             # Rimuovendo capture_output=True, l'output di spotdl
                             # verrà mostrato direttamente nel terminale.
@@ -291,6 +291,11 @@ if __name__ == "__main__":
         print(f"ERRORE inaspettato durante la lettura di '{artists_file}': {e}")
         exit()
 
+    # Calcola la directory di output (directory genitore dello script)
+    script_directory = os.path.dirname(os.path.abspath(__file__))
+    output_dir = os.path.abspath(os.path.join(script_directory, ".."))
+    print(f"I file verranno scaricati in: {output_dir}")
+
     # Ciclo principale: processa ogni artista dalla lista
     total_artists = len(artists_to_process)
     for i, artist_name in enumerate(artists_to_process):
@@ -301,7 +306,8 @@ if __name__ == "__main__":
                            client_secret,
                            telegram_bot_token,
                            telegram_chat_id,
-                           telegram_enabled)
+                           telegram_enabled,
+                           output_dir)
         except Exception as e:
             # Cattura eccezioni non gestite all'interno di process_artist
             error_message = f"Errore GRAVE e inaspettato durante l'elaborazione dell'artista '{artist_name}': {e}"
