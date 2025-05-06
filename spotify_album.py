@@ -172,7 +172,7 @@ def process_artist(artist_name, client_id, client_secret, telegram_bot_token, te
                             # Costruisci il comando come lista, aggiungendo i parametri, la directory di output e i cookie
                             command = ['spotdl', url, '--format', 'opus', '--bitrate', 'disable', '--output', output_directory]
                             if cookie_file_path and os.path.exists(cookie_file_path):
-                                command.extend(['--cookies', cookie_file_path])
+                                command.extend(['--cookie-file', cookie_file_path])
                                 print(f"   Utilizzo del file cookie: {cookie_file_path}")
                             else:
                                 print(f"   ATTENZIONE: File cookie non trovato o non specificato ({cookie_file_path}). Tento il download senza cookie.")
