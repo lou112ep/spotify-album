@@ -114,6 +114,7 @@ venv.bak/
 # Specifico per questo progetto
 spotify_album_env/
 errors.log
+artists.txt
 
 # File audio scaricati
 *.opus 

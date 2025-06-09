@@ -297,14 +297,14 @@ if __name__ == "__main__":
         print(f"ERRORE inaspettato durante la lettura di '{artists_file}': {e}")
         exit()
 
-    # Calcola la directory di output (directory genitore dello script)
-    script_directory = os.path.dirname(os.path.abspath(__file__))
-    output_dir = os.path.abspath(os.path.join(script_directory, ".."))
+
+    # Imposta la directory di output su un percorso assoluto
+    output_dir = "/home/luca/cloud/luca/files/music"
     print(f"I file verranno scaricati in: {output_dir}")
 
     # Definisci il percorso del file cookie
     # Assumiamo che sia nella stessa directory dello script
-    cookie_file = os.path.join(script_directory, "music.youtube.com_cookies.txt")
+    cookie_file = "cookies.txt"
     if not os.path.exists(cookie_file):
         # Fallback a cookies.txt se il primo non esiste
         cookie_file_alt = os.path.join(script_directory, "cookies.txt")
