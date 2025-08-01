@@ -96,11 +96,15 @@ download_status = {
 def run_download(items_to_download, output_dir, cookie_file):
     """Esegue il download in un thread separato."""
     global download_status
-    download_status['total_items'] = len(items_to_download)
-    download_status['completed_items'] = 0
-    download_status['status_messages'] = []
+    # Lo stato ora viene inizializzato nel thread principale
+    # download_status['total_items'] = len(items_to_download)
+    # download_status['completed_items'] = 0
+    # download_status['status_messages'] = []
     
-    for i, (item_type, item_name, item_url) in enumerate(items_to_download):
+    if not items_to_download:
+        download_status['progress'] = 100
+        download_status['status_messages'].append("Nessun elemento valido da scaricare.")
+        return
         download_status['status_messages'].append(f"-> Inizio download {item_type}: {item_name}")
         
         command = ['spotdl', item_url, '--format', 'opus', '--output', output_dir]
@@ -109,16 +113,16 @@ def run_download(items_to_download, output_dir, cookie_file):
 
         try:
             # Usiamo Popen per non bloccare e per catturare l'output linea per linea
-            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8')
+            # bufsize=1 abilita il line-buffering
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', bufsize=1)
             
-            while True:
-                output = process.stdout.readline()
-                if output == '' and process.poll() is not None:
-                    break
-                if output:
-                    # Aggiungiamo l'output di spotdl ai messaggi di stato
-                    download_status['status_messages'].append(f"   {output.strip()}")
+            # Leggi l'output linea per linea finché il processo non termina
+            for line in iter(process.stdout.readline, ''):
+                if line:
+                    download_status['status_messages'].append(f"   {line.strip()}")
             
+            process.wait() # Attendi che il processo termini
+
             if process.returncode == 0:
                 download_status['status_messages'].append(f"   Download di '{item_name}' completato con successo.")
             else:
@@ -220,6 +224,15 @@ def download():
 
     if not items_to_download:
         return "Nessun elemento valido da scaricare.", 400
+
+    # Azzera lo stato prima di iniziare un nuovo download
+    global download_status
+    download_status = {
+        'progress': 0,
+        'status_messages': ["Inizializzazione del download..."],
+        'total_items': len(items_to_download),
+        'completed_items': 0,
+    }
 
     output_dir = "/app/music"
     cookie_file = "/app/cookies.txt" 

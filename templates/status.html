@@ -37,15 +37,51 @@
     <div class="container mx-auto p-4">
         <h1 class="text-3xl font-bold mb-4">Stato del Download</h1>
         <div id="progress-container" class="w-full bg-gray-700 rounded-full h-4 mb-4">
-            <div id="progress-bar" class="bg-green-600 h-4 rounded-full" style="width: 0%;"></div>
+            <div id="progress-bar" class="bg-green-600 h-4 rounded-full transition-all duration-500" style="width: 0%;"></div>
         </div>
         <p id="progress-text" class="text-center mb-4">Progresso: 0%</p>
-        <div id="status-updates" class="bg-gray-800 p-4 rounded-lg font-mono text-sm space-y-2">
+        <div id="status-updates" class="bg-gray-800 p-4 rounded-lg font-mono text-sm space-y-2 h-64 overflow-y-auto">
             <!-- I messaggi di stato verranno inseriti qui -->
         </div>
         <div class="mt-6 text-center">
             <a href="/" id="home-link" class="bg-blue-600 hover:bg-blue-700 rounded p-3" style="display: none;">Torna alla Home</a>
         </div>
     </div>
+    <script>
+        function checkStatus() {
+            fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    const statusDiv = document.getElementById('status-updates');
+                    const progressText = document.getElementById('progress-text');
+                    const progressBar = document.getElementById('progress-bar');
+                    
+                    // Aggiorna la barra di progresso
+                    progressBar.style.width = `${data.progress}%`;
+                    progressText.textContent = `Progresso: ${data.progress}%`;
+
+                    // Aggiorna i messaggi di log
+                    statusDiv.innerHTML = '';
+                    data.status_messages.forEach(msg => {
+                        const p = document.createElement('p');
+                        p.textContent = msg;
+                        statusDiv.appendChild(p);
+                    });
+                    // Scrolla fino in fondo
+                    statusDiv.scrollTop = statusDiv.scrollHeight;
+
+                    // Controlla se continuare il polling
+                    if (data.progress < 100) {
+                        setTimeout(checkStatus, 2000);
+                    } else {
+                        // Assicura che la UI sia finalizzata correttamente
+                        progressBar.style.width = '100%';
+                        progressText.textContent = "Download completato!";
+                        document.getElementById('home-link').style.display = 'inline-block';
+                    }
+                });
+        }
+        window.onload = checkStatus;
+    </script>
 </body>
 </html>
