@@ -103,7 +103,7 @@ def run_download(items_to_download, output_dir, cookie_file):
     for i, (item_type, item_name, item_url) in enumerate(items_to_download):
         download_status['status_messages'].append(f"-> Inizio download {item_type}: {item_name}")
         
-        command = ['spotdl', item_url, '--format', 'opus', '--bitrate', 'disable', '--output', output_dir]
+        command = ['spotdl', item_url, '--format', 'opus', '--output', output_dir]
         if cookie_file and os.path.exists(cookie_file):
             command.extend(['--cookie-file', cookie_file])
 

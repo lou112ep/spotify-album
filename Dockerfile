@@ -1,6 +1,10 @@
 # Usa un'immagine Python ufficiale come base
 FROM python:3.9-slim
 
+# Aggiorna il package manager e installa ffmpeg
+# Pulisce anche la cache per mantenere l'immagine leggera
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 # Imposta la directory di lavoro nel container
 WORKDIR /app
 
