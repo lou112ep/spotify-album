@@ -112,17 +112,22 @@ def run_download(items_to_download, output_dir, cookie_file):
         try:
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', bufsize=1)
             
+            # Leggi l'output in tempo reale
             for line in iter(process.stdout.readline, ''):
                 if line:
                     download_status['status_messages'].append(f"   {line.strip()}")
             
-            process.wait()
+            # Attendi il completamento del processo con un timeout
+            process.wait(timeout=180) # Timeout di 3 minuti
 
             if process.returncode == 0:
                 download_status['status_messages'].append(f"   Download di '{item_name}' completato con successo.")
             else:
                 download_status['status_messages'].append(f"   ERRORE durante il download di '{item_name}'. Codice: {process.returncode}")
 
+        except subprocess.TimeoutExpired:
+            process.kill()
+            download_status['status_messages'].append(f"   ERRORE: Timeout (3 minuti) superato per '{item_name}'. Download interrotto e saltato.")
         except Exception as e:
             download_status['status_messages'].append(f"   ERRORE CRITICO per '{item_name}': {e}")
             
