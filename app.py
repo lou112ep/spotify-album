@@ -1,14 +1,15 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
 import os
 from dotenv import load_dotenv
 import spotify_album as sa
 import subprocess
 import requests
 
-
 load_dotenv()
 
 app = Flask(__name__)
+# Una chiave segreta è necessaria per i messaggi flash
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev")
 
 # Cache per i risultati
 results_cache = {}
@@ -84,7 +85,6 @@ def get_tracks(album_id):
     
     return jsonify(track_details)
 
-
 # --- Download e Stato ---
 download_status = {
     'progress': 0,
@@ -96,15 +96,13 @@ download_status = {
 def run_download(items_to_download, output_dir, cookie_file):
     """Esegue il download in un thread separato."""
     global download_status
-    # Lo stato ora viene inizializzato nel thread principale
-    # download_status['total_items'] = len(items_to_download)
-    # download_status['completed_items'] = 0
-    # download_status['status_messages'] = []
-    
+
     if not items_to_download:
         download_status['progress'] = 100
         download_status['status_messages'].append("Nessun elemento valido da scaricare.")
         return
+
+    for i, (item_type, item_name, item_url) in enumerate(items_to_download):
         download_status['status_messages'].append(f"-> Inizio download {item_type}: {item_name}")
         
         command = ['spotdl', item_url, '--format', 'opus', '--output', output_dir]
@@ -112,16 +110,13 @@ def run_download(items_to_download, output_dir, cookie_file):
             command.extend(['--cookie-file', cookie_file])
 
         try:
-            # Usiamo Popen per non bloccare e per catturare l'output linea per linea
-            # bufsize=1 abilita il line-buffering
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', bufsize=1)
             
-            # Leggi l'output linea per linea finché il processo non termina
             for line in iter(process.stdout.readline, ''):
                 if line:
                     download_status['status_messages'].append(f"   {line.strip()}")
             
-            process.wait() # Attendi che il processo termini
+            process.wait()
 
             if process.returncode == 0:
                 download_status['status_messages'].append(f"   Download di '{item_name}' completato con successo.")
@@ -135,7 +130,8 @@ def run_download(items_to_download, output_dir, cookie_file):
         download_status['progress'] = int((download_status['completed_items'] / download_status['total_items']) * 100)
 
     download_status['status_messages'].append("--- TUTTI I DOWNLOAD SONO TERMINATI ---")
-
+    if download_status['completed_items'] == download_status['total_items']:
+        download_status['progress'] = 100
 
 @app.route('/download', methods=['POST'])
 def download():
@@ -150,56 +146,6 @@ def download():
         return "Cache scaduta o non trovata. Riprova la ricerca.", 404
 
     items_to_download = []
-    
-    # Recupera i dettagli delle tracce dal form dinamicamente
-    track_details_map = {}
-    for key in request.form:
-        if key.startswith('track-url-'):
-            track_id = key.replace('track-url-', '')
-            track_name = request.form.get(f'track-name-{track_id}')
-            track_details_map[track_id] = {'url': request.form[key], 'name': track_name}
-
-    for item in selected_items:
-        item_type, item_id = item.split('-', 1)
-        
-        if item_type == 'album':
-            album = next((a for a in cache['albums'] if a['id'] == item_id), None)
-            if album:
-                items_to_download.append(('album', album['name'], album['url']))
-        
-        elif item_type == 'track':
-            # Per le tracce, abbiamo bisogno dell'URL e del nome, che ora recuperiamo
-            # dalla cache o, meglio, potremmo doverli passare direttamente dal form.
-            # Modifichiamo il JS per inviare questi dati.
-            # Dato che il JS è già stato scritto per non farlo, cerchiamo nella cache degli album le tracce
-            # Questo è inefficiente. Modifico il JS e l'HTML per passare i dati.
-            # Per ora, facciamo un placeholder
-            # Questo non funzionerà senza l'URL, quindi dobbiamo recuperarlo.
-            # La soluzione migliore è arricchire la cache o passare i dati dal form.
-            # **Modifica post-riflessione:** La soluzione più pulita è recuperare i dati dal form,
-            # ma questo richiede di modificare l'HTML e il JS per aggiungere campi nascosti.
-            # Una via di mezzo è recuperare di nuovo i dati, ma è inefficiente.
-            # La cache attuale non memorizza le tracce.
-            # Procediamo con l'idea di recuperare l'URL della traccia.
-            # Ho aggiornato il JS per popolare i data attributes, ma leggerli qui è complesso.
-            # La cosa più semplice è un approccio ibrido.
-            # L'HTML/JS è stato modificato per inviare "track-ID". Qui dobbiamo ottenere l'URL.
-            # L'approccio più robusto è fare una chiamata API per l'URL della traccia se non in cache.
-            # Ma il token è disponibile.
-            
-            # Semplifichiamo: non gestiamo le tracce qui finché il JS non invia più dati.
-            # **REVISIONE:** Il JS ora aggiunge le tracce dinamicamente. I loro dati non sono nel form standard.
-            # Dobbiamo leggerli in modo diverso.
-            # Modifico il modo in cui leggiamo il form per catturare i dati delle tracce.
-            
-            # Non posso ottenere i dettagli della traccia qui facilmente.
-            # Devo modificare l'HTML per includere i dati necessari.
-            # Riscrivo il JS per essere più esplicito.
-            pass # Placeholder
-            
-    # NUOVA LOGICA PER IL DOWNLOAD
-    
-    items_to_download = []
     for item in selected_items:
         item_type, item_id = item.split('-', 1)
         if item_type == 'album':
@@ -207,8 +153,6 @@ def download():
             if album:
                 items_to_download.append(('album', album['name'], album['url']))
         elif item_type == 'track':
-            # Qui abbiamo solo l'ID, dobbiamo ottenere l'URL.
-            # Facciamo una chiamata API al volo.
             track_info_url = f"https://api.spotify.com/v1/tracks/{item_id}"
             headers = {'Authorization': f'Bearer {cache["token"]}'}
             try:
@@ -225,7 +169,6 @@ def download():
     if not items_to_download:
         return "Nessun elemento valido da scaricare.", 400
 
-    # Azzera lo stato prima di iniziare un nuovo download
     global download_status
     download_status = {
         'progress': 0,
@@ -246,7 +189,6 @@ def download():
 @app.route('/update-cookie', methods=['POST'])
 def update_cookie():
     cookie_content = request.form.get('cookie_content', '')
-    # Il percorso è quello all'interno del container
     cookie_path = "/app/cookies.txt" 
     
     try:
@@ -259,7 +201,6 @@ def update_cookie():
         
     return redirect(url_for('index'))
 
-
 @app.route('/status')
 def status():
     return jsonify(download_status)
@@ -267,8 +208,6 @@ def status():
 @app.route('/status-page')
 def status_page():
     return render_template('status.html')
-
-
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5001)
