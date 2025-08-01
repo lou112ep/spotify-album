@@ -126,6 +126,40 @@ def get_artist_albums(artist_id, token):
     except json.JSONDecodeError:
         print("Errore: Risposta non valida da Spotify durante il recupero degli album.")
         return None
+
+
+# Funzione per ottenere le tracce di un album
+def get_album_tracks(album_id, token):
+    """Recupera tutte le tracce di un album dato il suo ID."""
+    tracks = []
+    url = f'https://api.spotify.com/v1/albums/{album_id}/tracks'
+    headers = {
+        'Authorization': f'Bearer {token}'
+    }
+    params = {
+        'market': 'IT',
+        'limit': 50
+    }
+
+    try:
+        while url:
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            response.raise_for_status()
+            page = response.json()
+            tracks.extend(page.get('items', []))
+            url = page.get('next')
+            # Rimuoviamo i parametri dalla richiesta successiva perché sono già nell'URL 'next'
+            params = {}
+        return tracks
+    except requests.exceptions.RequestException as e:
+        print(f"Errore durante il recupero delle tracce dell'album: {e}")
+        return None
+    except KeyError:
+        print("Errore: Formato della risposta delle tracce non valido.")
+        return None
+    except json.JSONDecodeError:
+        print("Errore: Risposta non valida da Spotify durante il recupero delle tracce.")
+        return None
     
 # --- Funzione Principale per Processare un Singolo Artista ---
 def process_artist(artist_name, client_id, client_secret, telegram_bot_token, telegram_chat_id, telegram_enabled, output_directory, cookie_file_path):

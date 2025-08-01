@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stato del Download</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        function checkStatus() {
+            fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    const statusDiv = document.getElementById('status-updates');
+                    const progressText = document.getElementById('progress-text');
+                    
+                    statusDiv.innerHTML = ''; // Pulisce i vecchi messaggi
+                    data.status_messages.forEach(msg => {
+                        const p = document.createElement('p');
+                        p.textContent = msg;
+                        statusDiv.appendChild(p);
+                    });
+
+                    progressText.textContent = `Progresso: ${data.progress}%`;
+
+                    if (data.progress < 100) {
+                        setTimeout(checkStatus, 2000); // Controlla di nuovo dopo 2 secondi
+                    } else {
+                        progressText.textContent = "Download completato!";
+                        document.getElementById('home-link').style.display = 'block';
+                    }
+                });
+        }
+        window.onload = checkStatus;
+    </script>
+</head>
+<body class="bg-gray-900 text-white">
+    <div class="container mx-auto p-4">
+        <h1 class="text-3xl font-bold mb-4">Stato del Download</h1>
+        <div id="progress-container" class="w-full bg-gray-700 rounded-full h-4 mb-4">
+            <div id="progress-bar" class="bg-green-600 h-4 rounded-full" style="width: 0%;"></div>
+        </div>
+        <p id="progress-text" class="text-center mb-4">Progresso: 0%</p>
+        <div id="status-updates" class="bg-gray-800 p-4 rounded-lg font-mono text-sm space-y-2">
+            <!-- I messaggi di stato verranno inseriti qui -->
+        </div>
+        <div class="mt-6 text-center">
+            <a href="/" id="home-link" class="bg-blue-600 hover:bg-blue-700 rounded p-3" style="display: none;">Torna alla Home</a>
+        </div>
+    </div>
+</body>
+</html>

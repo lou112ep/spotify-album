@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "5001:5001"
+    volumes:
+      # Monta la cartella della musica per salvare i file scaricati
+      - /home/luca/cloud/luca/files/music:/app/music
+      # Monta il file .env per le credenziali
+      - ./.env:/app/.env
+      # Monta il file dei cookie se esiste
+      - ./cookies.txt:/app/cookies.txt
+    environment:
+      # Passa le variabili d'ambiente al container
+      - CLIENT_ID=${CLIENT_ID}
+      - CLIENT_SECRET=${CLIENT_SECRET}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      # Imposta la porta di Flask
+      - FLASK_APP=app.py
+      - FLASK_RUN_PORT=5001
+      - FLASK_RUN_HOST=0.0.0.0
