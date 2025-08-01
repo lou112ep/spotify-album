@@ -146,25 +146,43 @@ def download():
         return "Cache scaduta o non trovata. Riprova la ricerca.", 404
 
     items_to_download = []
+    
+    # Separiamo gli album dalle tracce per elaborarle in modo efficiente
+    album_ids_to_download = []
+    track_ids_to_download = []
+
     for item in selected_items:
         item_type, item_id = item.split('-', 1)
         if item_type == 'album':
-            album = next((a for a in cache['albums'] if a['id'] == item_id), None)
-            if album:
-                items_to_download.append(('album', album['name'], album['url']))
+            album_ids_to_download.append(item_id)
         elif item_type == 'track':
-            track_info_url = f"https://api.spotify.com/v1/tracks/{item_id}"
-            headers = {'Authorization': f'Bearer {cache["token"]}'}
+            track_ids_to_download.append(item_id)
+
+    # Aggiungiamo gli album alla lista di download
+    for album_id in album_ids_to_download:
+        album = next((a for a in cache['albums'] if a['id'] == album_id), None)
+        if album:
+            items_to_download.append(('album', album['name'], album['url']))
+
+    # Aggiungiamo le tracce, recuperandole in blocco per efficienza
+    if track_ids_to_download:
+        headers = {'Authorization': f'Bearer {cache["token"]}'}
+        # Spotify permette di recuperare fino a 50 tracce per chiamata
+        for i in range(0, len(track_ids_to_download), 50):
+            chunk_ids = track_ids_to_download[i:i + 50]
+            track_info_url = f"https://api.spotify.com/v1/tracks?ids={','.join(chunk_ids)}"
             try:
                 response = requests.get(track_info_url, headers=headers)
                 response.raise_for_status()
-                track_data = response.json()
-                track_name = track_data.get('name')
-                track_url = track_data.get('external_urls', {}).get('spotify')
-                if track_name and track_url:
-                    items_to_download.append(('track', track_name, track_url))
+                tracks_data = response.json().get('tracks', [])
+                for track_data in tracks_data:
+                    if track_data:
+                        track_name = track_data.get('name')
+                        track_url = track_data.get('external_urls', {}).get('spotify')
+                        if track_name and track_url:
+                            items_to_download.append(('track', track_name, track_url))
             except requests.RequestException as e:
-                print(f"Errore nel recuperare i dati della traccia {item_id}: {e}")
+                print(f"Errore nel recuperare i dati delle tracce in blocco: {e}")
 
     if not items_to_download:
         return "Nessun elemento valido da scaricare.", 400
