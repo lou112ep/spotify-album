@@ -9,6 +9,7 @@ services:
       - ./cookies.txt:/app/cookies.txt
       - ./seed_artists.txt:/app/seed_artists.txt
       - ./processed_artists.txt:/app/processed_artists.txt
+      - ./discovery_settings.json:/app/discovery_settings.json
     environment:
       # Passa le variabili d'ambiente al container
       - CLIENT_ID=${CLIENT_ID}
@@ -31,6 +32,7 @@ services:
       - ./cookies.txt:/app/cookies.txt
       - ./seed_artists.txt:/app/seed_artists.txt
       - ./processed_artists.txt:/app/processed_artists.txt
+      - ./discovery_settings.json:/app/discovery_settings.json
     environment:
       # Passa le variabili d'ambiente al container
       - CLIENT_ID=${CLIENT_ID}
