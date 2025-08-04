@@ -25,7 +25,7 @@ services:
       - proxy-network
 
 networks:
-  npm_proxy_network: # Definisce come usare la rete esterna
+  proxy_network: # Definisce come usare la rete esterna
     # Assicurati che questo sia il nome ESATTO della rete usata da Nginx Proxy Manager
     name: proxy-network
     external: true
