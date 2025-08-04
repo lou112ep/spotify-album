@@ -4,12 +4,11 @@ services:
     ports:
       - "5001:5001"
     volumes:
-      # Monta la cartella della musica per salvare i file scaricati
+      # Monta i volumi necessari
       - /home/luca/cloud/luca/files/music:/app/music
-      # Monta il file .env per le credenziali
-      - ./.env:/app/.env
-      # Monta il file dei cookie se esiste
       - ./cookies.txt:/app/cookies.txt
+      - ./seed_artists.txt:/app/seed_artists.txt
+      - ./processed_artists.txt:/app/processed_artists.txt
     environment:
       # Passa le variabili d'ambiente al container
       - CLIENT_ID=${CLIENT_ID}
@@ -20,7 +19,24 @@ services:
       - FLASK_APP=app.py
       - FLASK_RUN_PORT=5001
       - FLASK_RUN_HOST=0.0.0.0
+    command: ["flask", "run"]
+    networks:
+      - proxy_network
 
+  discover:
+    build: .
+    volumes:
+      # Monta i volumi necessari
+      - /home/luca/cloud/luca/files/music:/app/music
+      - ./cookies.txt:/app/cookies.txt
+      - ./seed_artists.txt:/app/seed_artists.txt
+      - ./processed_artists.txt:/app/processed_artists.txt
+    environment:
+      # Passa le variabili d'ambiente al container
+      - CLIENT_ID=${CLIENT_ID}
+      - CLIENT_SECRET=${CLIENT_SECRET}
+      # Nota: le variabili di telegram non sono usate dallo script discover
+    command: ["python", "discover.py"]
     networks:
       - proxy_network
 
