@@ -1,10 +1,10 @@
-import requests
-import time
-import json
 import os
+import json
+import time
+import requests
+import subprocess
 from dotenv import load_dotenv
 import spotify_client as sc
-import time
 
 # Carica le variabili d'ambiente e le impostazioni
 load_dotenv()
@@ -63,33 +63,101 @@ def get_playlist_track_artists(playlist_id, token):
         for item in tracks:
             track = item.get('track')
             if track and track.get('artists'):
-                # Consideriamo solo l'artista principale di ogni traccia
                 main_artist = track['artists'][0]
                 artists.append(main_artist)
     except requests.RequestException as e:
         print(f"Errore nel recuperare la playlist {playlist_id}: {e}")
     return artists
 
+def discover_related_artists(token, settings):
+    """Logica di scoperta basata sugli artisti correlati."""
+    print("\n--- Inizio scoperta per Artisti Correlati ---")
+    seed_artists = read_ids_from_file(SEED_FILE)
+    processed_artists = read_ids_from_file(PROCESSED_FILE)
+    
+    new_seeds = seed_artists - processed_artists
+    artists_to_download = set()
+
+    if not new_seeds:
+        print("Nessun nuovo artista 'seme' da processare.")
+    else:
+        print(f"Trovati {len(new_seeds)} nuovi artisti seme: {', '.join(new_seeds)}")
+        popularity_threshold = settings.get('popularity_threshold_artist', 50)
+
+        for artist_id in new_seeds:
+            print(f"\nProcesso l'artista seme: {artist_id}")
+            related = get_related_artists(artist_id, token)
+            
+            for artist in related:
+                artist_name = artist.get('name')
+                artist_popularity = artist.get('popularity', 0)
+                related_artist_id = artist.get('id')
+
+                if related_artist_id in processed_artists:
+                    continue
+
+                if artist_popularity >= popularity_threshold:
+                    print(f"  -> Trovato artista correlato popolare: {artist_name} (Pop: {artist_popularity})... AGGIUNTO ALLA CODA.")
+                    artists_to_download.add(related_artist_id)
+            
+            processed_artists.add(artist_id)
+            time.sleep(1)
+
+    # Aggiorna i file
+    write_ids_to_file(PROCESSED_FILE, processed_artists)
+    remaining_seeds = seed_artists - new_seeds
+    write_ids_to_file(SEED_FILE, remaining_seeds)
+    print("--- Fine scoperta per Artisti Correlati ---")
+    return processed_artists, artists_to_download
+
+def discover_from_top_charts(token, settings, processed_artists):
+    """Logica di scoperta basata sulle classifiche Top."""
+    print("\n--- Inizio scoperta dalle Top Charts ---")
+    playlist_ids = settings.get('top_chart_playlists', {})
+    artists_to_download = set()
+
+    if not playlist_ids:
+        print("Nessuna playlist Top Chart definita nelle impostazioni.")
+        return artists_to_download
+
+    popularity_threshold = settings.get('popularity_threshold_artist', 50)
+
+    for chart_name, playlist_id in playlist_ids.items():
+        print(f"\nProcesso la classifica: {chart_name.capitalize()}")
+        artists = get_playlist_track_artists(playlist_id, token)
+        
+        for artist in artists:
+            artist_id = artist.get('id')
+            if artist_id in processed_artists or artist_id in artists_to_download:
+                continue
+
+            artist_popularity = artist.get('popularity', 0)
+            if artist_popularity >= popularity_threshold:
+                print(f"  -> Trovato artista popolare: {artist.get('name')} (Pop: {artist_popularity})... AGGIUNTO ALLA CODA.")
+                artists_to_download.add(artist_id)
+        
+        time.sleep(1)
+
+    print("--- Fine scoperta dalle Top Charts ---")
+    return artists_to_download
+
 def discover_from_genres(token, settings, processed_artists):
     """Logica di scoperta basata sui generi musicali."""
     print("\n--- Inizio scoperta per Generi Musicali ---")
     genres = settings.get('seed_genres', [])
+    artists_to_download = set()
+    
     if not genres:
         print("Nessun genere 'seme' definito nelle impostazioni.")
-        return set()
+        return artists_to_download
 
-    artists_to_download = set()
     popularity_threshold = settings.get('popularity_threshold_artist', 50)
     search_url = 'https://api.spotify.com/v1/search'
     headers = {'Authorization': f'Bearer {token}'}
 
     for genre in genres:
         print(f"\nProcesso il genere: {genre}")
-        params = {
-            'q': f'genre:"{genre}"',
-            'type': 'artist',
-            'limit': 20 # Prendiamo i primi 20 artisti per genere
-        }
+        params = {'q': f'genre:"{genre}"', 'type': 'artist', 'limit': 20}
         try:
             response = requests.get(search_url, headers=headers, params=params, timeout=10)
             response.raise_for_status()
@@ -109,99 +177,8 @@ def discover_from_genres(token, settings, processed_artists):
         
         time.sleep(1)
 
-    if artists_to_download:
-        print(f"\nArtisti dai generi che verranno scaricati: {len(artists_to_download)}")
-        # QUI ANDRA' LA LOGICA DI DOWNLOAD
-    else:
-        print("\nNessun nuovo artista da scaricare dai generi.")
-    
     print("--- Fine scoperta per Generi Musicali ---")
     return artists_to_download
-
-    print("\n--- Inizio scoperta dalle Top Charts ---")
-    playlist_ids = settings.get('top_chart_playlists', {})
-    if not playlist_ids:
-        print("Nessuna playlist Top Chart definita nelle impostazioni.")
-        return
-
-    artists_to_download = set()
-    popularity_threshold = settings.get('popularity_threshold_artist', 50)
-
-    for chart_name, playlist_id in playlist_ids.items():
-        print(f"\nProcesso la classifica: {chart_name.capitalize()}")
-        artists = get_playlist_track_artists(playlist_id, token)
-        
-        for artist in artists:
-            artist_id = artist.get('id')
-            if artist_id in processed_artists or artist_id in artists_to_download:
-                continue
-
-            artist_popularity = artist.get('popularity', 0)
-            if artist_popularity >= popularity_threshold:
-                print(f"  -> Trovato artista popolare: {artist.get('name')} (Pop: {artist_popularity})... AGGIUNTO ALLA CODA.")
-                artists_to_download.add(artist_id)
-            else:
-                 print(f"  -> Trovato artista: {artist.get('name')} (Pop: {artist_popularity})... IGNORATO (sotto soglia).")
-        
-        time.sleep(1)
-
-    if artists_to_download:
-        print(f"\nArtisti dalle Top Charts che verranno scaricati: {len(artists_to_download)}")
-        # QUI ANDRA' LA LOGICA DI DOWNLOAD
-    else:
-        print("\nNessun nuovo artista da scaricare dalle Top Charts.")
-    
-    print("--- Fine scoperta dalle Top Charts ---")
-    return artists_to_download
-
-    print("\n--- Inizio scoperta per Artisti Correlati ---")
-    seed_artists = read_ids_from_file(SEED_FILE)
-    processed_artists = read_ids_from_file(PROCESSED_FILE)
-    
-    if not new_seeds:
-        print("Nessun nuovo artista 'seme' da processare.")
-    else:
-        print(f"Trovati {len(new_seeds)} nuovi artisti seme: {', '.join(new_seeds)}")
-        
-        artists_to_download = set()
-        popularity_threshold = settings.get('popularity_threshold_artist', 50)
-
-        for artist_id in new_seeds:
-            print(f"\nProcesso l'artista seme: {artist_id}")
-            related = get_related_artists(artist_id, token)
-            
-            for artist in related:
-                artist_name = artist.get('name')
-                artist_popularity = artist.get('popularity', 0)
-                related_artist_id = artist.get('id')
-
-                if related_artist_id in processed_artists:
-                    continue
-
-                if artist_popularity >= popularity_threshold:
-                    print(f"  -> Trovato artista correlato popolare: {artist_name} (Pop: {artist_popularity})... AGGIUNTO ALLA CODA.")
-                    artists_to_download.add(related_artist_id)
-                else:
-                    print(f"  -> Trovato artista correlato: {artist_name} (Pop: {artist_popularity})... IGNORATO (sotto soglia).")
-            
-            # Aggiungiamo il seme agli artisti processati
-            processed_artists.add(artist_id)
-            time.sleep(1) # Pausa per evitare rate limiting
-
-        if artists_to_download:
-            print(f"\nArtisti che verranno scaricati in questa sessione: {len(artists_to_download)}")
-            # QUI ANDRA' LA LOGICA DI DOWNLOAD
-        else:
-            print("\nNessun nuovo artista da scaricare trovato in questa sessione.")
-
-    # Aggiorna i file
-    write_ids_to_file(PROCESSED_FILE, processed_artists)
-    # Rimuovi i semi processati
-    remaining_seeds = seed_artists - new_seeds
-    write_ids_to_file(SEED_FILE, remaining_seeds)
-    print("--- Fine scoperta per Artisti Correlati ---")
-    return processed_artists, artists_to_download
-
 
 def download_popular_tracks(artist_id, token, settings, cookie_file):
     """Scarica le tracce più popolari di un artista."""
@@ -229,7 +206,7 @@ def download_popular_tracks(artist_id, token, settings, cookie_file):
                 if track_url and track_name:
                     tracks_to_download.append(track_url)
                     print(f"  -> Aggiunta traccia '{track_name}' (Pop: {track_popularity}) dall'album '{album_name}'")
-        time.sleep(1) # Pausa tra un album e l'altro
+        time.sleep(1)
 
     if not tracks_to_download:
         print(f"Nessuna traccia abbastanza popolare da scaricare per l'artista {artist_id}.")
@@ -274,8 +251,7 @@ def main():
     all_known_artists.update(new_artists_charts)
 
     new_artists_genres = discover_from_genres(token, settings, all_known_artists)
-    all_known_artists.update(new_artists_genres)
-
+    
     # Combinare tutti i nuovi artisti trovati
     final_artists_to_download = new_artists_related.union(new_artists_charts, new_artists_genres)
 
@@ -295,7 +271,6 @@ def main():
         print("\nNessun nuovo artista da scaricare in questa sessione complessiva.")
 
     print("\nScript di scoperta completato.")
-
 
 if __name__ == "__main__":
     main()
