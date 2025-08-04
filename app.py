@@ -1,9 +1,27 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
 import os
 from dotenv import load_dotenv
-import spotify_album as sa
+import spotify_client as sc
 import subprocess
 import requests
+
+def add_to_seed_list(artist_id):
+    """Aggiunge un ID artista al file seed, evitando duplicati."""
+    file_path = 'seed_artists.txt'
+    try:
+        # Leggi gli ID esistenti per evitare duplicati
+        existing_ids = set()
+        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+            with open(file_path, 'r') as f:
+                existing_ids = {line.strip() for line in f}
+        
+        # Aggiungi il nuovo ID solo se non è già presente
+        if artist_id not in existing_ids:
+            with open(file_path, 'a') as f:
+                f.write(f"{artist_id}\n")
+    except Exception as e:
+        print(f"Errore durante l'aggiunta al file seed: {e}")
+
 
 load_dotenv()
 
@@ -27,15 +45,17 @@ def search():
     client_id = os.getenv("CLIENT_ID")
     client_secret = os.getenv("CLIENT_SECRET")
 
-    token = sa.get_spotify_token(client_id, client_secret)
+    token = sc.get_spotify_token(client_id, client_secret)
     if not token:
         return "Errore nell'ottenere il token da Spotify", 500
 
-    artist_id = sa.search_artist_id(artist_name, token)
-    if not artist_id:
+    artist_info = sc.search_artist_id(artist_name, token)
+    if not artist_info:
         return f"Artista '{artist_name}' non trovato.", 404
+    
+    artist_id = artist_info['id']
 
-    albums = sa.get_artist_albums(artist_id, token)
+    albums = sc.get_artist_albums(artist_id, token)
     if albums is None:
         return "Errore nel recuperare gli album.", 500
 
@@ -72,7 +92,7 @@ def get_tracks(album_id):
         return jsonify({'error': 'Sessione scaduta o token non trovato'}), 404
 
     token = cache['token']
-    tracks = sa.get_album_tracks(album_id, token)
+    tracks = sc.get_album_tracks(album_id, token)
 
     if tracks is None:
         return jsonify({'error': 'Errore nel recuperare le tracce'}), 500
@@ -150,6 +170,9 @@ def download():
     if not cache:
         return "Cache scaduta o non trovata. Riprova la ricerca.", 404
 
+    # Aggiungi l'artista alla lista dei "semi" per la scoperta
+    add_to_seed_list(artist_id)
+    
     items_to_download = []
     
     # Separiamo gli album dalle tracce per elaborarle in modo efficiente

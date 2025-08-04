@@ -122,3 +122,8 @@ artists.txt
 # File Cookie
 cookies.txt
 music.youtube.com_cookies.txt 
+
+# Discovery files
+seed_artists.txt
+processed_artists.txt
+discovery_settings.json
