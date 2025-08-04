@@ -22,3 +22,12 @@ services:
       - FLASK_APP=app.py
       - FLASK_RUN_PORT=5001
       - FLASK_RUN_HOST=0.0.0.0
+
+    networks:
+      - proxy-network
+
+networks:
+  npm_proxy_network: # Definisce come usare la rete esterna
+    # Assicurati che questo sia il nome ESATTO della rete usata da Nginx Proxy Manager
+    name: proxy-network
+    external: true
