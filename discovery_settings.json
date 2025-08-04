@@ -1,0 +1,14 @@
+{
+    "popularity_threshold_artist": 50,
+    "popularity_threshold_track": 30,
+    "top_chart_playlists": {
+        "it": "37i9dQZEVXbIQ_PU5Kes22",
+        "global": "37i9dQZEVXbMDoHDwVN2tF"
+    },
+    "seed_genres": [
+        "pop",
+        "rock",
+        "hip-hop",
+        "electronic"
+    ]
+}
