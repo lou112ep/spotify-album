@@ -1,9 +1,9 @@
 {
     "popularity_threshold_artist": 50,
-    "popularity_threshold_track": 30,
+    "popularity_threshold_track": 20,
     "top_chart_playlists": {
-        "it": "37i9dQZEVXbJUP2c2Nqs5q",
-        "global": "37i9dQZEVXbMDoHDwVN2tF"
+        "it_hits": "37i9dQZF1DX6wfQutiv3M4",
+        "global_hits": "37i9dQZF1DXcBWXoPEoT4i"
     },
     "seed_genres": [
         "pop",
