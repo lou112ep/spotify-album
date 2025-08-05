@@ -1,36 +1,34 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
 import os
-from dotenv import load_dotenv
-import spotify_client as sc
 import subprocess
-import requests
+from dotenv import load_dotenv
+from spotify_client import SpotifyClient
+
+load_dotenv()
+
+app = Flask(__name__)
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev")
+
+# Inizializza il client Spotify una sola volta
+spotify_client = SpotifyClient(os.getenv("CLIENT_ID"), os.getenv("CLIENT_SECRET"))
+
+# Cache per i risultati
+results_cache = {}
 
 def add_to_seed_list(artist_id):
     """Aggiunge un ID artista al file seed, evitando duplicati."""
     file_path = 'seed_artists.txt'
     try:
-        # Leggi gli ID esistenti per evitare duplicati
         existing_ids = set()
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
             with open(file_path, 'r') as f:
                 existing_ids = {line.strip() for line in f}
         
-        # Aggiungi il nuovo ID solo se non è già presente
         if artist_id not in existing_ids:
             with open(file_path, 'a') as f:
                 f.write(f"{artist_id}\n")
     except Exception as e:
         print(f"Errore durante l'aggiunta al file seed: {e}")
-
-
-load_dotenv()
-
-app = Flask(__name__)
-# Una chiave segreta è necessaria per i messaggi flash
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev")
-
-# Cache per i risultati
-results_cache = {}
 
 @app.route('/')
 def index():
@@ -42,24 +40,15 @@ def search():
     if not artist_name:
         return redirect(url_for('index'))
 
-    client_id = os.getenv("CLIENT_ID")
-    client_secret = os.getenv("CLIENT_SECRET")
-
-    token = sc.get_spotify_token(client_id, client_secret)
-    if not token:
-        return "Errore nell'ottenere il token da Spotify", 500
-
-    artist_info = sc.search_artist_id(artist_name, token)
+    artist_info = spotify_client.search_artist(artist_name)
     if not artist_info:
         return f"Artista '{artist_name}' non trovato.", 404
     
     artist_id = artist_info['id']
-
-    albums = sc.get_artist_albums(artist_id, token)
+    albums = spotify_client.get_artist_albums(artist_id)
     if albums is None:
         return "Errore nel recuperare gli album.", 500
 
-    # Semplifichiamo e puliamo la lista degli album
     album_details = []
     seen_albums = set()
     for album in albums:
@@ -73,26 +62,18 @@ def search():
             })
             seen_albums.add(album_name.lower())
     
-    # Ordiniamo gli album per nome
     album_details.sort(key=lambda x: x['name'])
     
     results_cache[artist_id] = {
         'artist_name': artist_name,
-        'albums': album_details,
-        'token': token
+        'albums': album_details
     }
 
     return render_template('results.html', artist_name=artist_name, albums=album_details, artist_id=artist_id)
 
 @app.route('/tracks/<album_id>')
 def get_tracks(album_id):
-    artist_id = request.args.get('artist_id')
-    cache = results_cache.get(artist_id)
-    if not cache or not cache.get('token'):
-        return jsonify({'error': 'Sessione scaduta o token non trovato'}), 404
-
-    token = cache['token']
-    tracks = sc.get_album_tracks(album_id, token)
+    tracks = spotify_client.get_album_tracks(album_id)
 
     if tracks is None:
         return jsonify({'error': 'Errore nel recuperare le tracce'}), 500
@@ -113,7 +94,7 @@ download_status = {
     'completed_items': 0,
 }
 
-def run_download(items_to_download, output_dir, cookie_file):
+def run_download(items_to_download):
     """Esegue il download in un thread separato."""
     global download_status
 
@@ -121,6 +102,9 @@ def run_download(items_to_download, output_dir, cookie_file):
         download_status['progress'] = 100
         download_status['status_messages'].append("Nessun elemento valido da scaricare.")
         return
+
+    output_dir = "/app/music"
+    cookie_file = "/app/cookies.txt" 
 
     for i, (item_type, item_name, item_url) in enumerate(items_to_download):
         download_status['status_messages'].append(f"-> Inizio download {item_type}: {item_name}")
@@ -132,13 +116,11 @@ def run_download(items_to_download, output_dir, cookie_file):
         try:
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', bufsize=1)
             
-            # Leggi l'output in tempo reale
             for line in iter(process.stdout.readline, ''):
                 if line:
                     download_status['status_messages'].append(f"   {line.strip()}")
             
-            # Attendi il completamento del processo con un timeout
-            process.wait(timeout=180) # Timeout di 3 minuti
+            process.wait(timeout=180)
 
             if process.returncode == 0:
                 download_status['status_messages'].append(f"   Download di '{item_name}' completato con successo.")
@@ -166,16 +148,10 @@ def download():
     if not selected_items or not artist_id:
         return "Selezione non valida", 400
 
-    cache = results_cache.get(artist_id)
-    if not cache:
-        return "Cache scaduta o non trovata. Riprova la ricerca.", 404
-
-    # Aggiungi l'artista alla lista dei "semi" per la scoperta
     add_to_seed_list(artist_id)
     
     items_to_download = []
     
-    # Separiamo gli album dalle tracce per elaborarle in modo efficiente
     album_ids_to_download = []
     track_ids_to_download = []
 
@@ -186,31 +162,23 @@ def download():
         elif item_type == 'track':
             track_ids_to_download.append(item_id)
 
-    # Aggiungiamo gli album alla lista di download
-    for album_id in album_ids_to_download:
-        album = next((a for a in cache['albums'] if a['id'] == album_id), None)
-        if album:
-            items_to_download.append(('album', album['name'], album['url']))
+    if album_ids_to_download:
+        cache = results_cache.get(artist_id)
+        if cache:
+             for album_id in album_ids_to_download:
+                album = next((a for a in cache['albums'] if a['id'] == album_id), None)
+                if album:
+                    items_to_download.append(('album', album['name'], album['url']))
 
-    # Aggiungiamo le tracce, recuperandole in blocco per efficienza
     if track_ids_to_download:
-        headers = {'Authorization': f'Bearer {cache["token"]}'}
-        # Spotify permette di recuperare fino a 50 tracce per chiamata
-        for i in range(0, len(track_ids_to_download), 50):
-            chunk_ids = track_ids_to_download[i:i + 50]
-            track_info_url = f"https://api.spotify.com/v1/tracks?ids={','.join(chunk_ids)}"
-            try:
-                response = requests.get(track_info_url, headers=headers)
-                response.raise_for_status()
-                tracks_data = response.json().get('tracks', [])
-                for track_data in tracks_data:
-                    if track_data:
-                        track_name = track_data.get('name')
-                        track_url = track_data.get('external_urls', {}).get('spotify')
-                        if track_name and track_url:
-                            items_to_download.append(('track', track_name, track_url))
-            except requests.RequestException as e:
-                print(f"Errore nel recuperare i dati delle tracce in blocco: {e}")
+        # Recuperiamo i dettagli in blocco
+        tracks_data = spotify_client.get_tracks_by_ids(track_ids_to_download)
+        for track_data in tracks_data:
+            if track_data:
+                track_name = track_data.get('name')
+                track_url = track_data.get('external_urls', {}).get('spotify')
+                if track_name and track_url:
+                    items_to_download.append(('track', track_name, track_url))
 
     if not items_to_download:
         return "Nessun elemento valido da scaricare.", 400
@@ -222,12 +190,9 @@ def download():
         'total_items': len(items_to_download),
         'completed_items': 0,
     }
-
-    output_dir = "/app/music"
-    cookie_file = "/app/cookies.txt" 
     
     import threading
-    download_thread = threading.Thread(target=run_download, args=(items_to_download, output_dir, cookie_file))
+    download_thread = threading.Thread(target=run_download, args=(items_to_download,))
     download_thread.start()
 
     return redirect(url_for('status_page'))

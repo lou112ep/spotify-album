@@ -4,7 +4,7 @@ import time
 import requests
 import subprocess
 from dotenv import load_dotenv
-import spotify_client as sc
+from spotify_client import SpotifyClient
 
 # Carica le variabili d'ambiente e le impostazioni
 load_dotenv()
@@ -38,38 +38,7 @@ def write_ids_to_file(filename, ids):
         for item_id in sorted(list(ids)):
             f.write(f"{item_id}\n")
 
-def get_related_artists(artist_id, token):
-    """Ottiene gli artisti correlati da Spotify."""
-    url = f'https://api.spotify.com/v1/artists/{artist_id}/related-artists'
-    headers = {'Authorization': f'Bearer {token}'}
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        return response.json().get('artists', [])
-    except requests.RequestException as e:
-        print(f"Errore nel recuperare artisti correlati per {artist_id}: {e}")
-        return []
-
-def get_playlist_track_artists(playlist_id, token):
-    """Recupera gli artisti principali delle tracce di una playlist."""
-    url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
-    headers = {'Authorization': f'Bearer {token}'}
-    params = {'fields': 'items(track(artists(id,name,popularity)))', 'limit': 50}
-    artists = []
-    try:
-        response = requests.get(url, headers=headers, params=params, timeout=10)
-        response.raise_for_status()
-        tracks = response.json().get('items', [])
-        for item in tracks:
-            track = item.get('track')
-            if track and track.get('artists'):
-                main_artist = track['artists'][0]
-                artists.append(main_artist)
-    except requests.RequestException as e:
-        print(f"Errore nel recuperare la playlist {playlist_id}: {e}")
-    return artists
-
-def discover_related_artists(token, settings):
+def discover_related_artists(client, settings):
     """Logica di scoperta basata sugli artisti correlati."""
     print("\n--- Inizio scoperta per Artisti Correlati ---")
     seed_artists = read_ids_from_file(SEED_FILE)
@@ -86,7 +55,7 @@ def discover_related_artists(token, settings):
 
         for artist_id in new_seeds:
             print(f"\nProcesso l'artista seme: {artist_id}")
-            related = get_related_artists(artist_id, token)
+            related = client.get_related_artists(artist_id)
             
             for artist in related:
                 artist_name = artist.get('name')
@@ -103,14 +72,13 @@ def discover_related_artists(token, settings):
             processed_artists.add(artist_id)
             time.sleep(1)
 
-    # Aggiorna i file
     write_ids_to_file(PROCESSED_FILE, processed_artists)
     remaining_seeds = seed_artists - new_seeds
     write_ids_to_file(SEED_FILE, remaining_seeds)
     print("--- Fine scoperta per Artisti Correlati ---")
     return processed_artists, artists_to_download
 
-def discover_from_top_charts(token, settings, processed_artists):
+def discover_from_top_charts(client, settings, processed_artists):
     """Logica di scoperta basata sulle classifiche Top."""
     print("\n--- Inizio scoperta dalle Top Charts ---")
     playlist_ids = settings.get('top_chart_playlists', {})
@@ -124,7 +92,7 @@ def discover_from_top_charts(token, settings, processed_artists):
 
     for chart_name, playlist_id in playlist_ids.items():
         print(f"\nProcesso la classifica: {chart_name.capitalize()}")
-        artists = get_playlist_track_artists(playlist_id, token)
+        artists = client.get_playlist_track_artists(playlist_id)
         
         for artist in artists:
             artist_id = artist.get('id')
@@ -141,7 +109,7 @@ def discover_from_top_charts(token, settings, processed_artists):
     print("--- Fine scoperta dalle Top Charts ---")
     return artists_to_download
 
-def discover_from_genres(token, settings, processed_artists):
+def discover_from_genres(client, settings, processed_artists):
     """Logica di scoperta basata sui generi musicali."""
     print("\n--- Inizio scoperta per Generi Musicali ---")
     genres = settings.get('seed_genres', [])
@@ -152,39 +120,31 @@ def discover_from_genres(token, settings, processed_artists):
         return artists_to_download
 
     popularity_threshold = settings.get('popularity_threshold_artist', 50)
-    search_url = 'https://api.spotify.com/v1/search'
-    headers = {'Authorization': f'Bearer {token}'}
 
     for genre in genres:
         print(f"\nProcesso il genere: {genre}")
-        params = {'q': f'genre:"{genre}"', 'type': 'artist', 'limit': 20}
-        try:
-            response = requests.get(search_url, headers=headers, params=params, timeout=10)
-            response.raise_for_status()
-            results = response.json().get('artists', {}).get('items', [])
+        results = client.search_for_genre(genre)
             
-            for artist in results:
-                artist_id = artist.get('id')
-                if artist_id in processed_artists or artist_id in artists_to_download:
-                    continue
+        for artist in results:
+            artist_id = artist.get('id')
+            if artist_id in processed_artists or artist_id in artists_to_download:
+                continue
 
-                artist_popularity = artist.get('popularity', 0)
-                if artist_popularity >= popularity_threshold:
-                    print(f"  -> Trovato artista popolare: {artist.get('name')} (Pop: {artist_popularity})... AGGIUNTO ALLA CODA.")
-                    artists_to_download.add(artist_id)
-        except requests.RequestException as e:
-            print(f"Errore durante la ricerca per il genere {genre}: {e}")
+            artist_popularity = artist.get('popularity', 0)
+            if artist_popularity >= popularity_threshold:
+                print(f"  -> Trovato artista popolare: {artist.get('name')} (Pop: {artist_popularity})... AGGIUNTO ALLA CODA.")
+                artists_to_download.add(artist_id)
         
         time.sleep(1)
 
     print("--- Fine scoperta per Generi Musicali ---")
     return artists_to_download
 
-def download_popular_tracks(artist_id, token, settings, cookie_file):
+def download_popular_tracks(client, artist_id, settings, cookie_file):
     """Scarica le tracce più popolari di un artista."""
     print(f"\n--- Inizio download per l'artista {artist_id} ---")
     
-    albums = sc.get_artist_albums(artist_id, token)
+    albums = client.get_artist_albums(artist_id)
     if not albums:
         print(f"Nessun album trovato per l'artista {artist_id}.")
         return
@@ -194,7 +154,7 @@ def download_popular_tracks(artist_id, token, settings, cookie_file):
 
     for album in albums:
         album_name = album.get('name')
-        tracks = sc.get_album_tracks(album.get('id'), token)
+        tracks = client.get_album_tracks(album.get('id'))
         if not tracks:
             continue
         
@@ -239,20 +199,16 @@ def main():
     if not settings:
         return
 
-    token = sc.get_spotify_token(CLIENT_ID, CLIENT_SECRET)
-    if not token:
-        print("Impossibile ottenere il token Spotify. Uscita.")
-        return
+    client = SpotifyClient(CLIENT_ID, CLIENT_SECRET)
 
-    processed_artists, new_artists_related = discover_related_artists(token, settings)
+    processed_artists, new_artists_related = discover_related_artists(client, settings)
     all_known_artists = processed_artists.union(new_artists_related)
     
-    new_artists_charts = discover_from_top_charts(token, settings, all_known_artists)
+    new_artists_charts = discover_from_top_charts(client, settings, all_known_artists)
     all_known_artists.update(new_artists_charts)
 
-    new_artists_genres = discover_from_genres(token, settings, all_known_artists)
+    new_artists_genres = discover_from_genres(client, settings, all_known_artists)
     
-    # Combinare tutti i nuovi artisti trovati
     final_artists_to_download = new_artists_related.union(new_artists_charts, new_artists_genres)
 
     if final_artists_to_download:
@@ -262,7 +218,7 @@ def main():
         
         for i, artist_id in enumerate(final_artists_to_download):
             print(f"\nScaricando artista {i+1}/{len(final_artists_to_download)}: {artist_id}")
-            download_popular_tracks(artist_id, token, settings, cookie_file)
+            download_popular_tracks(client, artist_id, settings, cookie_file)
             processed_artists.add(artist_id)
             write_ids_to_file(PROCESSED_FILE, processed_artists)
             print(f"Artista {artist_id} segnato come processato.")
