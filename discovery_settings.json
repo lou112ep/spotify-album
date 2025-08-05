@@ -2,8 +2,9 @@
     "popularity_threshold_artist": 50,
     "popularity_threshold_track": 20,
     "top_chart_playlists": {
-        "it_hits": "37i9dQZF1DX6wfQutiv3M4",
-        "global_hits": "37i9dQZF1DXcBWXoPEoT4i"
+        "top_50_italia": "37i9dQZEVXbIQnj7RRhdSX",
+        "top_songs_global": "37i9dQZEVXbNG2KDcFcKOF",
+        "top_50_global": "37i9dQZEVXbMDoHDwVN2tF"
     },
     "seed_genres": [
         "pop",
