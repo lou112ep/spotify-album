@@ -82,8 +82,8 @@ def discover_from_top_charts(client, settings, processed_artists):
     """Logica di scoperta basata sulle classifiche Top."""
     print("\n--- Inizio scoperta dalle Top Charts ---")
     chart_names = {
-        "Top 50 - Italia": "it",
-        "Top 50 - Global": "global"
+        "Top 50 Italia": "it", # Stringa di ricerca più affidabile
+        "Top 50 Global": "global"
     }
     artists_to_download = set()
     popularity_threshold = settings.get('popularity_threshold_artist', 50)
@@ -91,8 +91,11 @@ def discover_from_top_charts(client, settings, processed_artists):
     for name, region in chart_names.items():
         print(f"\nProcesso la classifica: {name}")
         search_result = client.search_playlist(name)
+        
+        # CONTROLLO DI SICUREZZA:
+        # Se la ricerca non produce risultati, avvisa e passa al prossimo.
         if not search_result:
-            print(f"  -> Nessuna playlist trovata per '{name}'.")
+            print(f"  -> ATTENZIONE: Nessuna playlist trovata per la ricerca '{name}'. Salto.")
             continue
         
         playlist_id = search_result[0].get('id')
