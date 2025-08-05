@@ -92,10 +92,10 @@ def discover_from_top_charts(client, settings, processed_artists):
         print(f"\nProcesso la classifica: {name}")
         search_result = client.search_playlist(name)
         
-        # CONTROLLO DI SICUREZZA:
-        # Se la ricerca non produce risultati, avvisa e passa al prossimo.
-        if not search_result:
-            print(f"  -> ATTENZIONE: Nessuna playlist trovata per la ricerca '{name}'. Salto.")
+        # CONTROLLO DI SICUREZZA ROBUSTO:
+        # Controlla che la lista non sia vuota E che il primo elemento non sia None.
+        if not search_result or not search_result[0]:
+            print(f"  -> ATTENZIONE: Nessuna playlist valida trovata per la ricerca '{name}'. Salto.")
             continue
         
         playlist_id = search_result[0].get('id')
