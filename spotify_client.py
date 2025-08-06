@@ -75,24 +75,18 @@ class SpotifyClient:
         """Recupera solo gli album e i singoli di un artista."""
         albums = []
         url = f'https://api.spotify.com/v1/artists/{artist_id}/albums'
-        # MODIFICA CHIAVE: Chiediamo solo album e singoli
         params = {'include_groups': 'album,single', 'market': 'IT', 'limit': 50}
-        
         processed_album_names = set()
-
         while url:
             page = self._make_request(url, params=params)
             if not page:
                 break
-            
             for item in page.get('items', []):
-                # Evitiamo duplicati (es. versioni Deluxe, edizioni diverse)
                 if item['name'].lower() not in processed_album_names:
                     albums.append(item)
                     processed_album_names.add(item['name'].lower())
-            
             url = page.get('next')
-            params = {} # I parametri sono già nell'URL 'next'
+            params = {}
         return albums
 
     def get_album_tracks(self, album_id):
@@ -120,12 +114,14 @@ class SpotifyClient:
         url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
         params = {'fields': 'items(track(artists(id,name,popularity)))', 'limit': 50}
         data = self._make_request(url, params=params)
+        if not data:
+            print(f"  -> ATTENZIONE: La playlist con ID '{playlist_id}' non è stata trovata o è vuota. Salto.")
+            return []
         artists = []
-        if data:
-            for item in data.get('items', []):
-                track = item.get('track')
-                if track and track.get('artists'):
-                    artists.append(track['artists'][0])
+        for item in data.get('items', []):
+            track = item.get('track')
+            if track and track.get('artists'):
+                artists.append(track['artists'][0])
         return artists
 
     def search_for_genre(self, genre):
