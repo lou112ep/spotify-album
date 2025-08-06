@@ -72,17 +72,27 @@ class SpotifyClient:
         return None
 
     def get_artist_albums(self, artist_id):
-        """Recupera tutti gli album di un artista."""
+        """Recupera solo gli album e i singoli di un artista."""
         albums = []
         url = f'https://api.spotify.com/v1/artists/{artist_id}/albums'
+        # MODIFICA CHIAVE: Chiediamo solo album e singoli
         params = {'include_groups': 'album,single', 'market': 'IT', 'limit': 50}
+        
+        processed_album_names = set()
+
         while url:
             page = self._make_request(url, params=params)
             if not page:
                 break
-            albums.extend(page.get('items', []))
+            
+            for item in page.get('items', []):
+                # Evitiamo duplicati (es. versioni Deluxe, edizioni diverse)
+                if item['name'].lower() not in processed_album_names:
+                    albums.append(item)
+                    processed_album_names.add(item['name'].lower())
+            
             url = page.get('next')
-            params = {}
+            params = {} # I parametri sono già nell'URL 'next'
         return albums
 
     def get_album_tracks(self, album_id):

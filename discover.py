@@ -82,7 +82,7 @@ def discover_from_top_charts(client, settings, processed_artists):
     """Logica di scoperta basata sulle classifiche Top."""
     print("\n--- Inizio scoperta dalle Top Charts ---")
     chart_names = {
-        "Top 50 Italia": "it", # Stringa di ricerca più affidabile
+        "Top 50 Italia": "it",
         "Top 50 Global": "global"
     }
     artists_to_download = set()
@@ -92,8 +92,6 @@ def discover_from_top_charts(client, settings, processed_artists):
         print(f"\nProcesso la classifica: {name}")
         search_result = client.search_playlist(name)
         
-        # CONTROLLO DI SICUREZZA ROBUSTO:
-        # Controlla che la lista non sia vuota E che il primo elemento non sia None.
         if not search_result or not search_result[0]:
             print(f"  -> ATTENZIONE: Nessuna playlist valida trovata per la ricerca '{name}'. Salto.")
             continue
@@ -152,42 +150,27 @@ def discover_from_genres(client, settings, processed_artists):
     print("--- Fine scoperta per Generi Musicali ---")
     return artists_to_download
 
-def download_popular_tracks(client, artist_id, settings, cookie_file):
-    """Scarica le tracce più popolari di un artista."""
+def download_artist_main_releases(client, artist_id, cookie_file):
+    """
+    Scarica solo gli album e i singoli di un artista, ignorando le tracce singole.
+    """
     print(f"\n--- Inizio download per l'artista {artist_id} ---")
     
-    albums = client.get_artist_albums(artist_id)
-    if not albums:
-        print(f"Nessun album trovato per l'artista {artist_id}.")
+    # MODIFICA CHIAVE: get_artist_albums ora restituisce solo album e singoli principali
+    releases = client.get_artist_albums(artist_id)
+    if not releases:
+        print(f"Nessun album o singolo principale trovato da scaricare per l'artista {artist_id}.")
         return
 
-    track_popularity_threshold = settings.get('popularity_threshold_track', 20)
-    tracks_to_download = []
-
-    for album in albums:
-        album_name = album.get('name')
-        tracks = client.get_album_tracks(album.get('id'))
-        if not tracks:
-            continue
-        
-        for track in tracks:
-            track_popularity = track.get('popularity', 0)
-            if track_popularity >= track_popularity_threshold:
-                track_url = track.get('external_urls', {}).get('spotify')
-                track_name = track.get('name')
-                if track_url and track_name:
-                    tracks_to_download.append(track_url)
-                    print(f"  -> Aggiunta traccia '{track_name}' (Pop: {track_popularity}) dall'album '{album_name}'")
-        time.sleep(1)
-
-    if not tracks_to_download:
-        print(f"Nessuna traccia abbastanza popolare da scaricare per l'artista {artist_id}.")
-        return
+    print(f"Trovati {len(releases)} album/singoli principali da scaricare.")
         
     output_dir = "/app/music"
-    for i, track_url in enumerate(tracks_to_download):
-        print(f"  Scaricando traccia {i+1}/{len(tracks_to_download)}...")
-        command = ['spotdl', track_url, '--format', 'opus', '--output', output_dir]
+    for i, release in enumerate(releases):
+        release_url = release.get('external_urls', {}).get('spotify')
+        release_name = release.get('name')
+        print(f"  Scaricando release {i+1}/{len(releases)}: '{release_name}'")
+
+        command = ['spotdl', release_url, '--format', 'opus', '--output', output_dir]
         if cookie_file and os.path.exists(cookie_file):
             command.extend(['--cookie-file', cookie_file])
         
@@ -196,14 +179,14 @@ def download_popular_tracks(client, artist_id, settings, cookie_file):
             for line in iter(process.stdout.readline, ''):
                 if line:
                     print(f"    {line.strip()}")
-            process.wait(timeout=180)
+            process.wait(timeout=300) # Timeout di 5 minuti per release
             if process.returncode != 0:
-                print(f"    ATTENZIONE: spotdl ha restituito un errore per {track_url}")
+                print(f"    ATTENZIONE: spotdl ha restituito un errore per {release_name}")
         except subprocess.TimeoutExpired:
             process.kill()
-            print(f"    ERRORE: Timeout superato per {track_url}")
+            print(f"    ERRORE: Timeout superato per {release_name}")
         except Exception as e:
-            print(f"    ERRORE CRITICO per {track_url}: {e}")
+            print(f"    ERRORE CRITICO per {release_name}: {e}")
 
 def main():
     print("Avvio dello script di scoperta musicale...")
@@ -230,11 +213,11 @@ def main():
         
         for i, artist_id in enumerate(final_artists_to_download):
             print(f"\nScaricando artista {i+1}/{len(final_artists_to_download)}: {artist_id}")
-            download_popular_tracks(client, artist_id, settings, cookie_file)
+            # MODIFICA CHIAVE: Usiamo la nuova funzione di download
+            download_artist_main_releases(client, artist_id, cookie_file)
             processed_artists.add(artist_id)
             write_ids_to_file(PROCESSED_FILE, processed_artists)
             print(f"Artista {artist_id} segnato come processato.")
-
     else:
         print("\nNessun nuovo artista da scaricare in questa sessione complessiva.")
 
